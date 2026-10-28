@@ -1,0 +1,11 @@
+{
+  "name": "dalmuti-game",
+  "private": true,
+  "description": "달무티 웹 게임 — 싱글(AI) + 멀티플레이 서버",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
