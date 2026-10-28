@@ -165,6 +165,13 @@ button{font:inherit;color:inherit}
 .members{list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:6px}
 .members li{display:flex; align-items:center; justify-content:space-between; gap:6px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--felt); min-width:0}
 .members li.empty{border-style:dashed; background:none; color:var(--muted); font-size:12px}
+.roomlist{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; max-height:190px; overflow:auto}
+.roomlist li{display:flex; align-items:center; gap:10px; padding:7px 8px 7px 12px; border:1px solid var(--line); border-radius:8px; background:var(--felt); min-width:0}
+.roomlist li .nm{flex:1; min-width:0}
+.roomlist li .score{flex:none}
+.roomlist li.empty{border-style:dashed; background:none; color:var(--muted); font-size:12px; padding:9px 12px}
+.check{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); cursor:pointer}
+.check input{accent-color:var(--gold); width:16px; height:16px}
 .link{font-family:ui-monospace,monospace; font-size:12px; color:var(--text); word-break:break-all}
 .code-in{text-transform:uppercase; letter-spacing:.2em}
 .menu{display:flex; flex-direction:column; gap:10px}
@@ -213,7 +220,7 @@ const HUE=['','#6b3fa0','#9a2f5e','#b23a3a','#c4622d','#a87a1f','#6f7d22','#3f8a
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 // V: 지금 그리는 상태(싱글은 game.view(0), 멀티는 서버가 보낸 view). game: 싱글 엔진. MP: 멀티 연결
-let V=null, game=null, MP=null, speed=600, sel=new Set(), token=0, setupN=5, myName='나', toastT=null, seen='';
+let V=null, game=null, MP=null, speed=600, sel=new Set(), token=0, setupN=5, myName='나', toastT=null, seen='', setupPub=false, listWS=null;
 // 멀티 서버 주소. 비워두면 이 페이지를 띄운 서버(npm start)로 접속. 화면을 GitHub Pages 등에 따로 올릴 땐 'wss://서버주소'를 넣는다
 const SERVER_URL='';
 const canMulti=!!SERVER_URL||location.protocol.startsWith('http');
@@ -245,8 +252,8 @@ const SID=(()=>{
   try{let s=localStorage.getItem('dalmuti-sid'); if(!s){s=mk();localStorage.setItem('dalmuti-sid',s);} return s;}catch(_){return mk();}
 })();
 function wsSend(m){ if(MP&&MP.ws.readyState===WebSocket.OPEN) MP.ws.send(JSON.stringify(m)); }
-function joinRoom(hello){ // hello: {t:'create',n,name} | {t:'join',code,name}
-  leaveRoom(); token++; game=null;
+function joinRoom(hello){ // hello: {t:'create',n,name,pub} | {t:'join',code,name}
+  stopWatchRooms(); leaveRoom(); token++; game=null;
   MP={hello,retry:0,code:null,host:false,room:null};
   openSocket();
 }
@@ -277,6 +284,24 @@ function leaveRoom(){
   const ws=MP.ws; MP=null; V=null;
   try{localStorage.removeItem('dalmuti-room');}catch(_){}
   ws.onclose=null; if(ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({t:'leave'})); ws.close();
+}
+
+// 시작 메뉴가 열려 있는 동안만 서버에서 공개 방 목록을 받는다 (방 접속과는 별도 연결)
+function watchRooms(){
+  stopWatchRooms();
+  const ws=new WebSocket(SERVER_URL||(location.protocol==='https:'?'wss://':'ws://')+location.host);
+  listWS=ws;
+  ws.onopen=()=>ws.send(JSON.stringify({t:'list'}));
+  ws.onmessage=e=>{ const m=JSON.parse(e.data); if(m.t==='rooms'&&listWS===ws) renderRoomList(m.list); };
+  ws.onclose=()=>{ if(listWS===ws){ listWS=null; renderRoomList(null); } };
+}
+function stopWatchRooms(){ const ws=listWS; listWS=null; if(ws){ ws.onclose=null; ws.close(); } }
+function renderRoomList(list){
+  const el=$('#roomList'); if(!el) return;
+  el.innerHTML=!list?'<li class="empty">서버에 연결할 수 없습니다</li>'
+    :!list.length?'<li class="empty">지금 열린 공개 방이 없습니다</li>'
+    :list.map(r=>`<li><span class="nm">${esc(r.host)}의 방</span><span class="score">${r.count}/${r.n}명</span><button class="btn sm" data-code="${esc(r.code)}">참가</button></li>`).join('');
+  el.querySelectorAll('button[data-code]').forEach(b=>b.onclick=()=>joinRoom({t:'join',code:b.dataset.code,name:myName=$('#nameIn').value.trim()||'나'}));
 }
 
 /* ---------- 사람 입력 ---------- */
@@ -440,7 +465,7 @@ function renderLog(){ $('#log').innerHTML=V.log.map(l=>`<li class="${l.kind?'k-'
 
 /* ---------- 모달 ---------- */
 let modalKind=null;
-function closeModal(){modalKind=null;$('#modal').hidden=true;$('#modal').innerHTML='';}
+function closeModal(){stopWatchRooms();modalKind=null;$('#modal').hidden=true;$('#modal').innerHTML='';}
 function renderModal(){
   if(modalKind) return;
   const m=$('#modal');
@@ -481,8 +506,10 @@ function openSetup(code=''){
     <div class="menu">
       <button class="btn primary" id="setGo">싱글플레이</button>
       <button class="btn" id="createGo"${off?' disabled':''}>멀티플레이 · 방 만들기</button>
+      <label class="check"><input type="checkbox" id="pubIn"${setupPub?' checked':''}${off?' disabled':''}> 공개 방으로 만들기 (아래 목록에 보여서 누구나 참가)</label>
       <div class="field"><label for="codeIn">멀티플레이 · 받은 방 코드로 참가</label>
         <div class="joinrow"><input id="codeIn" class="code-in" maxlength="4" placeholder="ABCD" autocomplete="off" value="${esc(code)}"${off?' disabled':''}><button class="btn" id="joinGo"${off?' disabled':''}>방 참가</button></div></div>
+      ${off?'':'<div class="field"><label>열린 공개 방</label><ul class="roomlist" id="roomList"><li class="empty">불러오는 중…</li></ul></div>'}
     </div>
     ${off?'<p class="muted">멀티플레이는 서버(<b>npm start</b>)로 접속했을 때만 쓸 수 있습니다.</p>':''}
     ${cancel?'<div class="row-end"><button class="btn" id="setCancel">취소</button></div>':''}</div>`;
@@ -491,17 +518,19 @@ function openSetup(code=''){
   const join=()=>{ const c=$('#codeIn').value.trim().toUpperCase(); if(c.length!==4) return toast('방 코드 4자리를 입력하세요'); joinRoom({t:'join',code:c,name:nm()}); };
   m.querySelectorAll('#nChips button').forEach(b=>b.onclick=()=>{setupN=+b.dataset.n;m.querySelectorAll('#nChips button').forEach(x=>x.setAttribute('aria-pressed',x===b));});
   $('#setGo').onclick=()=>startGame(setupN,nm());
-  $('#createGo').onclick=()=>joinRoom({t:'create',n:setupN,name:nm()});
+  $('#pubIn').onchange=e=>setupPub=e.target.checked;
+  $('#createGo').onclick=()=>joinRoom({t:'create',n:setupN,name:nm(),pub:setupPub});
   $('#joinGo').onclick=join;
   $('#codeIn').addEventListener('keydown',e=>{ if(e.key==='Enter') join(); });
   if(code) $('#codeIn').focus();
+  if(!off) watchRooms();
   $('#setCancel')&&($('#setCancel').onclick=()=>{closeModal();render();});
 }
 function openLobby(){
   modalKind='lobby'; const r=MP.room, m=$('#modal'), empty=r.n-r.members.length;
   const local=['localhost','127.0.0.1'].includes(location.hostname);
   m.innerHTML=`<div class="panel"><h2>대기실</h2>
-    <div class="roomcode"><span class="lbl">방 코드</span><b>${esc(r.code)}</b></div>
+    <div class="roomcode"><span class="lbl">방 코드</span><b>${esc(r.code)}</b><span class="badge">${r.pub?'공개 방':'비공개 방'}</span></div>
     <p class="muted">${local?`친구는 서버 터미널에 찍힌 <b>http://IP${location.port?':'+location.port:''}</b> 주소로 접속해 이 코드를 입력하면 됩니다.`:`초대 링크: <span class="link">${esc(location.origin)}/?room=${esc(r.code)}</span>`}</p>
     <ul class="members">${r.members.map(x=>`<li><span class="nm">${esc(x.name)}</span>${x.host?'<span class="badge r0">방장</span>':''}</li>`).join('')}${'<li class="empty">빈자리 · AI</li>'.repeat(empty)}</ul>
     <p class="muted">${r.n}인 게임 · 지금 ${r.members.length}명 입장${empty?` · 시작하면 빈자리 ${empty}개는 AI가 채웁니다`:''}</p>

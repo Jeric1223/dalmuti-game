@@ -19,9 +19,11 @@ const server=http.createServer((req,res)=>{
   });
 });
 
-/* room = {code, n, hostSid, members:[{sid,name,ws,seat}], game, emptyTimer}
+/* room = {code, n, pub, hostSid, members:[{sid,name,ws,seat}], game, emptyTimer}
+   pub: 공개 방이면 시작 메뉴의 방 목록에 보인다
    member.ws가 null이면 연결 끊김. seat은 게임 시작 후 플레이어 id */
 const rooms=new Map();
+const watchers=new Set();               // 시작 메뉴에서 방 목록을 보고 있는 연결
 
 function newCode(){
   const A='ABCDEFGHJKLMNPQRSTUVWXYZ'; let c;
@@ -29,9 +31,21 @@ function newCode(){
   return c;
 }
 function send(ws,msg){ if(ws&&ws.readyState===ws.OPEN) ws.send(JSON.stringify(msg)); }
+// 공개 + 대기 중 + 자리 남음 + 접속자 있음
+function openRooms(){
+  const list=[];
+  for(const r of rooms.values()){
+    if(!r.pub||r.game||r.members.length>=r.n||!r.members.some(m=>m.ws)) continue;
+    list.push({code:r.code,host:r.members.find(m=>m.sid===r.hostSid)?.name||'',count:r.members.length,n:r.n});
+    if(list.length>=20) break;
+  }
+  return list;
+}
+function broadcastList(){ const msg={t:'rooms',list:openRooms()}; watchers.forEach(ws=>send(ws,msg)); }
 function broadcastRoom(room){
   const members=room.members.map(m=>({name:m.name,host:m.sid===room.hostSid,online:!!m.ws}));
-  room.members.forEach(m=>send(m.ws,{t:'room',code:room.code,n:room.n,host:m.sid===room.hostSid,started:!!room.game,members}));
+  room.members.forEach(m=>send(m.ws,{t:'room',code:room.code,n:room.n,pub:room.pub,host:m.sid===room.hostSid,started:!!room.game,members}));
+  broadcastList();
 }
 function broadcastState(room){ room.members.forEach(m=>send(m.ws,{t:'state',view:room.game.view(m.seat)})); }
 function cleanName(s){ return String(s||'').trim().slice(0,8)||'손님'; }
@@ -70,7 +84,7 @@ wss.on('connection',ws=>{
     if(m.t==='create'){
       const n=Number(m.n);
       if(!Number.isInteger(n)||n<4||n>8) return send(ws,{t:'error',msg:'인원은 4~8명입니다'});
-      r={code:newCode(),n,hostSid:sid,members:[],game:null,emptyTimer:null}; rooms.set(r.code,r);
+      r={code:newCode(),n,pub:!!m.pub,hostSid:sid,members:[],game:null,emptyTimer:null}; rooms.set(r.code,r);
     } else {
       r=rooms.get(String(m.code||'').trim().toUpperCase());
       if(!r) return send(ws,{t:'error',msg:'방을 찾을 수 없습니다',fatal:true});
@@ -84,7 +98,7 @@ wss.on('connection',ws=>{
       if(r.members.length>=r.n) return send(ws,{t:'error',msg:'방이 가득 찼습니다',fatal:true});
       mem={sid,name:uniqueName(r,cleanName(m.name)),ws,seat:null}; r.members.push(mem);
     }
-    room=r; me=mem; clearTimeout(r.emptyTimer);
+    room=r; me=mem; clearTimeout(r.emptyTimer); watchers.delete(ws);
     if(!r.members.some(x=>x.sid===r.hostSid&&x.ws)) r.hostSid=sid;   // 방장이 없으면 넘겨받음
     broadcastRoom(r);
     if(r.game){ if(r.game.isAI(mem.seat)) r.game.setAI(mem.seat,false); else send(ws,{t:'state',view:r.game.view(mem.seat)}); }
@@ -108,6 +122,7 @@ wss.on('connection',ws=>{
     let m; try{ m=JSON.parse(raw); }catch(_){ return; }
     if(!m||typeof m.t!=='string') return;
     if(m.t==='create'||m.t==='join') return hello(m);
+    if(m.t==='list'){ if(!room){ watchers.add(ws); send(ws,{t:'rooms',list:openRooms()}); } return; }
     if(!room) return;
     const g=room.game, isHost=me.sid===room.hostSid;
     switch(m.t){
@@ -120,7 +135,7 @@ wss.on('connection',ws=>{
       case 'leave': drop(); break;
     }
   });
-  ws.on('close',()=>{ if(me&&me.ws===ws) drop(); });
+  ws.on('close',()=>{ watchers.delete(ws); if(me&&me.ws===ws) drop(); });
 });
 
 // 응답 없는 연결 정리 (와이파이 끊김 등은 close 이벤트가 늦게 온다)

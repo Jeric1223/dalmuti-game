@@ -58,10 +58,11 @@ dalmuti-game/
 
 | 방향 | 메시지 |
 |---|---|
-| C→S | `create{sid,name,n}`, `join{sid,name,code}`, `start`(방장), `play{ids}`, `pass`, `tax{ids}`, `rev{call}`, `next`(방장), `leave` |
-| S→C | `room{code,n,host,started,members}`, `state{view}`, `toast{msg}`, `error{msg,fatal?}` |
+| C→S | `create{sid,name,n,pub}`, `join{sid,name,code}`, `list`(방 밖에서만), `start`(방장), `play{ids}`, `pass`, `tax{ids}`, `rev{call}`, `next`(방장), `leave` |
+| S→C | `room{code,n,pub,host,started,members}`, `rooms{list:[{code,host,count,n}]}`, `state{view}`, `toast{msg}`, `error{msg,fatal?}` |
 
 - 방 코드: 4글자 대문자 (`I`, `O` 제외). 초대 링크 `?room=CODE`
+- 공개 방(`pub`)은 시작 메뉴의 "열린 공개 방" 목록에 보인다 (대기 중·자리 남음·접속자 있음, 최대 20개). 시작 메뉴는 별도 WebSocket으로 `list`를 보내 구독하고, 서버는 `broadcastRoom` 때마다 구독자에게 `rooms`를 다시 보냄. 메뉴를 닫거나 방에 들어가면 연결을 끊음
 - `sid`: 브라우저 localStorage `dalmuti-sid`. 같은 sid로 다시 들어오면 **같은 자리로 복귀** (새로고침·재접속). 현재 방은 `dalmuti-room`에 저장해 자동 재참가
 - 게임 중 연결이 끊기면 `setAI(seat, true)`로 AI가 대신 두고, 돌아오면 해제. 혁명/세금 반환 대기 중이었다면 AI가 즉시 처리
 - 방장이 나가면 접속 중인 다음 사람에게 넘어감. 대기실에서 전원 이탈 시 즉시, 게임 중 전원 이탈 시 10분 뒤 방 삭제
