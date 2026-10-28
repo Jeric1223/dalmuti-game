@@ -153,6 +153,10 @@ button{font:inherit;color:inherit}
 .members li.empty{border-style:dashed; background:none; color:var(--muted); font-size:12px}
 .link{font-family:ui-monospace,monospace; font-size:12px; color:var(--text); word-break:break-all}
 .code-in{text-transform:uppercase; letter-spacing:.2em}
+.menu{display:flex; flex-direction:column; gap:10px}
+.menu>.btn{width:100%; padding:12px 18px}
+.joinrow{display:flex; gap:8px}
+.joinrow input{flex:1; min-width:0}
 @media (prefers-reduced-motion:reduce){ *{animation:none!important; transition:none!important} }
 </style>
 </head>
@@ -193,7 +197,7 @@ const HUE=['','#6b3fa0','#9a2f5e','#b23a3a','#c4622d','#a87a1f','#6f7d22','#3f8a
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 // V: 지금 그리는 상태(싱글은 game.view(0), 멀티는 서버가 보낸 view). game: 싱글 엔진. MP: 멀티 연결
-let V=null, game=null, MP=null, speed=600, sel=new Set(), token=0, setupN=5, setupMode='single', myName='나', toastT=null, seen='';
+let V=null, game=null, MP=null, speed=600, sel=new Set(), token=0, setupN=5, myName='나', toastT=null, seen='';
 // 멀티 서버 주소. 비워두면 이 페이지를 띄운 서버(npm start)로 접속. 화면을 GitHub Pages 등에 따로 올릴 땐 'wss://서버주소'를 넣는다
 const SERVER_URL='';
 const canMulti=!!SERVER_URL||location.protocol.startsWith('http');
@@ -424,27 +428,29 @@ function renderModal(){
   m.hidden=true; m.innerHTML='';
 }
 function openSetup(code=''){
-  modalKind='setup'; const m=$('#modal');
-  if(code) setupMode='multi';
-  const multi=setupMode==='multi', off=multi&&!canMulti;
+  modalKind='setup'; const m=$('#modal'), cancel=!!(game||V), off=!canMulti;
   const chips=[4,5,6,7,8].map(n=>`<button data-n="${n}" aria-pressed="${n===setupN}">${n}</button>`).join('');
-  m.innerHTML=`<div class="panel"><h2>새 게임</h2>
-    <div class="seg" id="modeSeg"><button data-m="single" aria-pressed="${!multi}">혼자 하기</button><button data-m="multi" aria-pressed="${multi}">같이 하기</button></div>
-    <p class="muted">${multi?'방을 만들어 코드를 나눠 주거나, 받은 코드로 참가합니다. 빈자리는 AI가 채웁니다.':'나 혼자 AI 신하들과 겨룹니다. 첫 라운드 자리는 추첨으로 정해집니다.'}</p>
-    ${off?'<p>같이 하기는 서버를 거쳐야 합니다. 터미널에서 <b>npm install</b> 후 <b>npm start</b>를 실행하고 <b>http://localhost:3000</b>으로 접속하세요.</p>':`
+  m.innerHTML=`<div class="panel"><h2>${cancel?'새 게임':'달무티'}</h2>
+    <p class="muted">숫자가 작을수록 강한 카드 게임. 혼자 AI와 겨루거나, 방을 만들어 친구와 함께합니다.</p>
     <div class="field"><label for="nameIn">내 이름</label><input id="nameIn" maxlength="8" value="${esc(myName)}"></div>
-    <div class="field"><label>인원 (${multi?'사람 + AI':'나 포함'})</label><div class="chips" id="nChips">${chips}</div></div>
-    ${multi?`<div class="field"><label for="codeIn">받은 방 코드</label><input id="codeIn" class="code-in" maxlength="4" placeholder="ABCD" autocomplete="off" value="${esc(code)}"></div>`:''}`}
-    <div class="row-end">${game||V?'<button class="btn" id="setCancel">취소</button>':''}${off?'':multi?'<button class="btn" id="joinGo">코드로 참가</button><button class="btn primary" id="createGo">방 만들기</button>':'<button class="btn primary" id="setGo">시작하기</button>'}</div></div>`;
+    <div class="field"><label>인원 (싱글플레이는 나 포함 · 방 만들기는 사람 + AI)</label><div class="chips" id="nChips">${chips}</div></div>
+    <div class="menu">
+      <button class="btn primary" id="setGo">싱글플레이</button>
+      <button class="btn" id="createGo"${off?' disabled':''}>멀티플레이 · 방 만들기</button>
+      <div class="field"><label for="codeIn">멀티플레이 · 받은 방 코드로 참가</label>
+        <div class="joinrow"><input id="codeIn" class="code-in" maxlength="4" placeholder="ABCD" autocomplete="off" value="${esc(code)}"${off?' disabled':''}><button class="btn" id="joinGo"${off?' disabled':''}>방 참가</button></div></div>
+    </div>
+    ${off?'<p class="muted">멀티플레이는 서버(<b>npm start</b>)로 접속했을 때만 쓸 수 있습니다.</p>':''}
+    ${cancel?'<div class="row-end"><button class="btn" id="setCancel">취소</button></div>':''}</div>`;
   m.hidden=false;
   const nm=()=>(myName=$('#nameIn').value.trim()||'나');
   const join=()=>{ const c=$('#codeIn').value.trim().toUpperCase(); if(c.length!==4) return toast('방 코드 4자리를 입력하세요'); joinRoom({t:'join',code:c,name:nm()}); };
-  m.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>{ if($('#nameIn')) nm(); setupMode=b.dataset.m; openSetup(); });
   m.querySelectorAll('#nChips button').forEach(b=>b.onclick=()=>{setupN=+b.dataset.n;m.querySelectorAll('#nChips button').forEach(x=>x.setAttribute('aria-pressed',x===b));});
-  $('#setGo')&&($('#setGo').onclick=()=>startGame(setupN,nm()));
-  $('#createGo')&&($('#createGo').onclick=()=>joinRoom({t:'create',n:setupN,name:nm()}));
-  $('#joinGo')&&($('#joinGo').onclick=join);
-  $('#codeIn')&&$('#codeIn').addEventListener('keydown',e=>{ if(e.key==='Enter') join(); });
+  $('#setGo').onclick=()=>startGame(setupN,nm());
+  $('#createGo').onclick=()=>joinRoom({t:'create',n:setupN,name:nm()});
+  $('#joinGo').onclick=join;
+  $('#codeIn').addEventListener('keydown',e=>{ if(e.key==='Enter') join(); });
+  if(code) $('#codeIn').focus();
   $('#setCancel')&&($('#setCancel').onclick=()=>{closeModal();render();});
 }
 function openLobby(){
@@ -481,7 +487,7 @@ function openRules(){
     <h3>점수</h3><p>라운드마다 1등은 (인원−1)점, 꼴찌는 0점을 받습니다.</p>
     </div><div class="row-end"><button class="btn primary" id="rulesOk">닫기</button></div></div>`;
   m.hidden=false;
-  $('#rulesOk').onclick=()=>{ closeModal(); if(MP&&!V) openLobby(); else render(); };
+  $('#rulesOk').onclick=()=>{ closeModal(); if(MP&&!V) openLobby(); else if(!game&&!V) openSetup(); else render(); };
 }
 
 /* ---------- 이벤트 ---------- */
@@ -508,12 +514,11 @@ document.addEventListener('keydown',e=>{
 });
 window.addEventListener('resize',layoutHand);
 
-startGame(5,myName);
-// 새로고침 전에 방에 있었으면 다시 들어가고, 초대 링크(?room=)로 왔으면 참가 화면을 연다
+// 새로고침 전에 방에 있었으면 다시 들어가고, 아니면 시작 메뉴(초대 링크 ?room=이면 코드 채워서)를 연다
 let savedRoom=null; try{savedRoom=JSON.parse(localStorage.getItem('dalmuti-room'));}catch(_){}
 const inviteCode=new URLSearchParams(location.search).get('room');
 if(canMulti&&savedRoom?.code){ myName=savedRoom.name||myName; joinRoom({t:'join',code:savedRoom.code,name:myName}); }
-else if(canMulti&&inviteCode) openSetup(inviteCode.trim().toUpperCase().slice(0,4));
+else openSetup(canMulti&&inviteCode?inviteCode.trim().toUpperCase().slice(0,4):'');
 </script>
 </body>
 </html>
