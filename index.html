@@ -14,6 +14,7 @@
   --ivory:#f2e9d4; --ink:#2a1a1c;
   --text:#f1e3cb; --muted:#b39888;
   --ok:#8cc79a; --bad:#e2765f;
+  --table-hi:#4d2229; --table-lo:#1f0d10; --rim:#3b2418;
   --f-display:'IM Fell English SC','Gowun Batang',Georgia,serif;
   --f-ko:'Gowun Batang','Nanum Myeongjo',Georgia,serif;
   --f-ui:'IBM Plex Sans KR',system-ui,-apple-system,'Apple SD Gothic Neo',sans-serif;
@@ -58,31 +59,43 @@ button{font:inherit;color:inherit}
 
 .board{display:flex; flex-direction:column; gap:12px; min-width:0}
 
-.seats{display:grid; grid-template-columns:repeat(auto-fill,minmax(118px,1fr)); gap:8px}
-.seat{background:rgba(58,29,34,.65); border:1px solid var(--line); border-radius:10px; padding:8px 10px; display:flex; flex-direction:column; gap:5px; min-width:0; transition:border-color .2s, box-shadow .2s}
+/* 타원 테이블 + 둘레 자리. 자리는 --cx/--cy(-1~1)로 타원 위에 배치, 내 자리가 맨 아래에서 시계 방향으로 진행 순서 */
+.arena{--sw:88px; --sh:86px; position:relative; height:480px}
+@media (min-width:720px){ .arena{--sw:150px; --sh:92px; height:470px} }
+.seats{position:absolute; inset:0; pointer-events:none}
+.seat{position:absolute; width:var(--sw); left:calc(50% + var(--cx) * (50% - var(--sw) / 2)); top:calc(50% + var(--cy) * (50% - var(--sh) / 2)); transform:translate(-50%,-50%); z-index:2;
+  background:rgba(42,20,24,.94); border:1px solid var(--line); border-radius:10px; padding:6px 8px; display:flex; flex-direction:column; gap:4px; min-width:0; transition:border-color .2s, box-shadow .2s}
+.seat.self{border-color:var(--gold-dim)}
+.seat.self .nm{color:var(--gold)}
+.ord{display:inline-grid; place-items:center; flex:none; width:17px; height:17px; border-radius:50%; background:var(--felt); border:1px solid var(--gold-dim); color:var(--gold); font-size:10px; font-variant-numeric:tabular-nums}
+.seat.turn .ord{background:var(--gold); color:var(--ink)}
 .seat.turn{border-color:var(--gold); box-shadow:0 0 0 1px var(--gold), 0 0 18px rgba(217,180,95,.25)}
 .seat.done{opacity:.55}
-.seat-top{display:flex; justify-content:space-between; align-items:center; gap:6px}
+.seat-top{display:flex; align-items:center; gap:5px}
+.seat-mid .badge{margin-right:auto}
+@media (max-width:719px){ .seat{padding:5px 6px} .seat .backs{display:none} .seat .nm{font-size:13px} .seat-mid{gap:4px} .seat .badge{padding:1px 4px; font-size:10px} }
 .nm{font-family:var(--f-ko); font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .badge{font-size:10.5px; padding:2px 7px; border-radius:4px; white-space:nowrap; background:#2a1418; color:var(--muted); border:1px solid var(--line)}
 .badge.r0{background:var(--gold); color:var(--ink); border-color:var(--gold)}
 .badge.r1{color:var(--gold); border-color:var(--gold-dim)}
 .badge.rp{color:var(--bad); border-color:#7a3a33}
-.seat-mid{display:flex; align-items:center; gap:8px; font-variant-numeric:tabular-nums; color:var(--muted); font-size:12px}
+.seat-mid{display:flex; align-items:center; gap:8px; white-space:nowrap; font-variant-numeric:tabular-nums; color:var(--muted); font-size:12px}
 .backs{display:inline-flex}
 .back{width:11px; height:16px; border-radius:2px; background:repeating-linear-gradient(45deg,#6e2630 0 3px,#561c25 3px 6px); border:1px solid var(--gold-dim); margin-left:-5px}
 .back:first-child{margin-left:0}
-.seat-act{min-height:30px; display:flex; align-items:center; gap:3px; font-size:12px; color:var(--muted); flex-wrap:wrap}
+.seat-act{min-height:28px; display:flex; align-items:center; gap:3px; font-size:12px; color:var(--muted); flex-wrap:wrap}
 .pass{color:var(--muted); font-style:italic; font-family:var(--f-ko)}
 .think{color:var(--gold)}
 .mini{display:inline-grid; place-items:center; width:20px; height:28px; border-radius:3px; background:var(--ivory); color:var(--h); font-family:var(--f-display); font-size:13px; border-top:5px solid var(--h); line-height:1}
 
-.table{position:relative; min-height:200px; border-radius:110px / 70px; background:radial-gradient(ellipse at 50% 40%, #3d1c22 0%, var(--felt) 75%); border:1px solid var(--line); box-shadow:inset 0 0 40px rgba(0,0,0,.45); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:20px 16px}
-.pile{display:flex; justify-content:center; flex-wrap:wrap; gap:0; min-height:var(--ch)}
-.pile .card{position:relative; margin-left:calc(var(--cw) * -0.45); cursor:default; animation:drop .25s ease-out}
+.table{position:absolute; inset:calc(var(--sh) / 2) calc(var(--sw) / 2); border-radius:50%; background:radial-gradient(ellipse at 50% 42%, var(--table-hi) 0%, var(--table-lo) 100%); border:10px solid var(--rim); box-shadow:0 0 0 1px var(--gold-dim), 0 14px 34px rgba(0,0,0,.55), inset 0 0 40px rgba(0,0,0,.5); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:calc(var(--sh) / 2 + 4px) 14px}
+.pile{display:flex; justify-content:center; gap:0; min-height:var(--ch)}
+.pile .card{position:relative; margin-left:calc(var(--cw) * -0.45); cursor:default; transform:rotate(var(--rot,0deg))}
 .pile .card:first-child{margin-left:0}
+.pile .card:nth-child(3n+1){--rot:-5deg} .pile .card:nth-child(3n+2){--rot:3deg} .pile .card:nth-child(3n){--rot:-1deg}
 .pile.clearing{opacity:.35; transition:opacity .4s}
-@keyframes drop{from{transform:translateY(-14px); opacity:0} to{transform:none; opacity:1}}
+.card.landing{visibility:hidden}
+.card.flying{position:fixed; margin:0; z-index:40; pointer-events:none}
 .pile-label{font-family:var(--f-ko); color:var(--text); text-align:center; font-size:14px}
 .pile-label b{color:var(--gold); font-weight:700}
 .pile-sub{color:var(--muted); font-size:12px; text-align:center}
@@ -176,8 +189,10 @@ button{font:inherit;color:inherit}
     </div>
   </header>
   <main class="board">
-    <section class="seats" id="seats" aria-label="다른 플레이어"></section>
-    <section class="table" id="table" aria-live="polite"></section>
+    <section class="arena">
+      <div class="table" id="table" aria-live="polite"></div>
+      <div class="seats" id="seats" aria-label="자리 (번호 = 진행 순서)"></div>
+    </section>
     <section class="me" id="me">
       <div class="me-info"><div class="who" id="meWho"></div><div class="score" id="meScore"></div></div>
       <div class="status" id="status"></div>
@@ -318,23 +333,27 @@ function render(){
   for(const id of [...sel]) if(!V.hand.some(c=>c.id===id)) sel.delete(id);
   $('#roundLbl').textContent=`${V.round}라운드 · ${V.n}인${MP?' · 방 '+MP.code:''}`;
   $('#speedLbl').style.display=$('#speedSeg').style.display=MP?'none':'';
-  renderSeats(); renderTable(); renderMe(); renderLog(); renderModal();
+  // 손패를 다시 그리기 전에 위치를 잡아둔다 (내가 낸 카드는 손패 자리에서 날아감)
+  const fromHand=new Map([...$('#hand').children].map(el=>[+el.dataset.id,el.getBoundingClientRect()]));
+  renderSeats(); renderTable(); throwCards(fromHand); renderMe(); renderLog(); renderModal();
 }
 function renderSeats(){
+  // 나를 맨 아래에 두고 진행 순서(order)대로 시계 방향 배치
   const hi=V.order.indexOf(V.me), list=[];
-  for(let k=1;k<V.n;k++) list.push(V.order[(hi+k)%V.n]);
-  $('#seats').innerHTML=list.map(id=>{
+  for(let k=0;k<V.n;k++) list.push(V.order[(hi+k)%V.n]);
+  $('#seats').innerHTML=list.map((id,k)=>{
+    const a=Math.PI/2+k*2*Math.PI/V.n, cx=Math.cos(a).toFixed(3), cy=Math.sin(a).toFixed(3);
     const p=V.players[id], pos=posOf(id), fin=V.finished.indexOf(id), la=V.lastAction[id];
     const turn=V.phase==='play'&&V.turn===id;
     let act='&nbsp;';
     if(fin>=0) act=`<span class="think">${fin+1}등으로 끝냄</span>`;
     else if(turn) act='<span class="think">고민 중…</span>';
     else if(la) act=la.pass?'<span class="pass">패스</span>':la.cards.map(mini).join('');
-    const nb=Math.min(p.count,7);
+    const nb=Math.min(p.count,5);
     const tag=!MP?'':!p.human?'<span class="tag">AI</span>':p.ai?'<span class="tag">자리 비움</span>':'';
-    return `<div class="seat ${turn?'turn':''} ${fin>=0?'done':''}">
-      <div class="seat-top"><span class="nm">${esc(p.name)}</span><span class="badge ${badgeCls(pos,V.n)}">${titleFor(pos,V.n)}</span></div>
-      <div class="seat-mid"><span class="backs">${'<span class="back"></span>'.repeat(nb)}</span><span>${p.count}장</span>${tag}</div>
+    return `<div class="seat ${turn?'turn':''} ${fin>=0?'done':''} ${id===V.me?'self':''}" data-id="${id}" style="--cx:${cx};--cy:${cy}">
+      <div class="seat-top"><span class="ord">${pos+1}</span><span class="nm">${esc(p.name)}</span></div>
+      <div class="seat-mid"><span class="badge ${badgeCls(pos,V.n)}">${titleFor(pos,V.n)}</span><span class="backs">${'<span class="back"></span>'.repeat(nb)}</span><span>${p.count}장</span>${tag}</div>
       <div class="seat-act">${act}</div></div>`;
   }).join('');
 }
@@ -342,7 +361,7 @@ function renderTable(){
   const t=$('#table');
   if(V.pile){
     const by=V.players[V.pile.by];
-    t.innerHTML=`<div class="pile ${V.clearing?'clearing':''}">${V.pile.cards.map(c=>cardHTML(c)).join('')}</div>
+    t.innerHTML=`<div class="pile ${V.clearing?'clearing':''}">${V.pile.cards.map(c=>cardHTML(c,flying.has(c.id)?'landing':'')).join('')}</div>
       <div class="pile-label"><b>${esc(by.name)}</b> · ${V.pile.count}장 · ${vLabel(V.pile.value)}</div>
       <div class="pile-sub">${V.clearing?'모두 패스 — 판을 정리합니다':`이기려면 같은 ${V.pile.count}장, ${V.pile.value===1?'더 낼 수 없음':V.pile.value-1+' 이하 숫자'}`}</div>`;
   } else {
@@ -350,6 +369,30 @@ function renderTable(){
     const leader=V.phase==='play'&&V.turn!=null?`${esc(V.players[V.turn].name)}의 선 — 원하는 숫자를 원하는 장수만큼`:'';
     t.innerHTML=`<div class="empty-pile">✶</div><div class="pile-label">${msg||leader}</div><div class="pile-sub">숫자가 작을수록 강합니다 · 1이 최강, 12가 최약</div>`;
   }
+}
+// 새로 낸 카드면 낸 사람 자리(내 카드는 손패 위치)에서 한 장씩 가운데로 던진다
+let pileKey='';
+const flying=new Set();
+function throwCards(fromHand){
+  const p=V.pile, key=p?p.by+':'+p.cards.map(c=>c.id).join(','):'';
+  if(key===pileKey) return; pileKey=key;
+  if(!p||matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const seat=$(`#seats [data-id="${p.by}"]`)?.getBoundingClientRect();
+  [...$('#table .pile').children].forEach((el,i)=>{
+    const id=+el.dataset.id, from=fromHand.get(id)||seat; if(!from) return;
+    const to=el.getBoundingClientRect(), w=el.offsetWidth, h=el.offsetHeight;
+    const tx=to.left+to.width/2-w/2, ty=to.top+to.height/2-h/2;
+    const fly=el.cloneNode(true); fly.classList.add('flying');
+    Object.assign(fly.style,{left:tx+'px',top:ty+'px'});
+    $('.app').appendChild(fly);
+    flying.add(id); el.classList.add('landing');
+    const dx=from.left+from.width/2-tx-w/2, dy=from.top+from.height/2-ty-h/2, s=fromHand.has(id)?1:.45, r=Math.round(Math.random()*60-30);
+    const anim=fly.animate([
+      {transform:`translate(${dx}px,${dy}px) scale(${s}) rotate(${r}deg)`},
+      {transform:getComputedStyle(el).transform}
+    ],{duration:420,delay:i*110,easing:'cubic-bezier(.2,.75,.3,1)',fill:'both'});
+    anim.onfinish=anim.oncancel=()=>{ fly.remove(); flying.delete(id); $(`#table .card[data-id="${id}"]`)?.classList.remove('landing'); };
+  });
 }
 function renderMe(){
   const me=V.players[V.me], hand=V.hand, pos=posOf(V.me), fin=V.finished.indexOf(V.me), myTurn=canAct(), tax=myTax();
