@@ -6,6 +6,7 @@ const {createGame,shuffle,BOT_NAMES}=require('./engine.js');
 
 const PORT=process.env.PORT||3000;
 const AI_DELAY=700;                    // AI 한 수 간격(ms)
+const TURN_MS=30*1000;                 // 사람 차례 제한시간
 const EMPTY_ROOM_TTL=10*60*1000;       // 게임 중 전원 이탈 시 방 보관 시간
 const STATIC={'/':'index.html','/index.html':'index.html','/engine.js':'engine.js'};
 const TYPES={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8'};
@@ -64,6 +65,7 @@ function startRoomGame(room){
     // 방이 지워졌거나 게임이 바뀌면 예약된 타이머는 무시
     later:(fn,ms)=>setTimeout(()=>{ if(rooms.get(room.code)===room&&room.game===game) fn(); },ms),
     speed:()=>AI_DELAY,
+    turnMs:TURN_MS,
     changed:()=>broadcastState(room),
     toast:(msg,to)=>room.members.forEach(m=>{ if(to==null||m.seat===to) send(m.ws,{t:'toast',msg}); }),
   });

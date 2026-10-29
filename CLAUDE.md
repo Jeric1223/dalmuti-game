@@ -46,7 +46,7 @@ dalmuti-game/
 
 - `engine.js`의 `createGame(seats, io)`가 게임 하나를 만든다. 상태 `G`는 엔진 안에만 있고, 밖에서는 입력 함수와 `view(me)`로만 접근
   - `seats`: `[{name, human}]` (순서 = 플레이어 id)
-  - `io`: `{later(fn,ms), speed(), changed(), toast(msg, toId?)}` — 타이머·알림을 호스트(브라우저/서버)가 주입
+  - `io`: `{later(fn,ms), speed(), changed(), toast(msg, toId?), turnMs?}` — 타이머·알림을 호스트(브라우저/서버)가 주입. `turnMs`는 사람 차례 제한시간 (서버 `TURN_MS` 30초, 싱글은 없음)
   - 반환: `{start, play(id, ids|null), taxReturn(id, ids), revolution(id, call), nextRound(), setAI(id, on), view(me), isAI(id)}`
   - 입력 함수는 phase·차례·소유 카드·중복·`isValid`를 전부 검증하고 틀리면 무시 (서버에서 그대로 신뢰 경계로 씀)
 - `view(me)`: 플레이어별로 필터링한 상태. **손패는 자기 것만**, 다른 사람은 `count`만. 로그의 `secret`(세금 카드 내용)은 당사자(`who`)에게만
@@ -62,7 +62,7 @@ dalmuti-game/
 | S→C | `room{code,n,pub,host,started,members}`, `rooms{list:[{code,host,count,n}]}`, `state{view}`, `toast{msg}`, `error{msg,fatal?}` |
 
 - 방 코드: 4글자 대문자 (`I`, `O` 제외). 초대 링크 `?room=CODE`
-- 공개 방(`pub`)은 시작 메뉴의 "열린 공개 방" 목록에 보인다 (대기 중·자리 남음·접속자 있음, 최대 20개). 시작 메뉴는 별도 WebSocket으로 `list`를 보내 구독하고, 서버는 `broadcastRoom` 때마다 구독자에게 `rooms`를 다시 보냄. 메뉴를 닫거나 방에 들어가면 연결을 끊음
+- 공개 방(`pub`)은 "멀티플레이 로비" 화면(`openBrowse`)의 방 목록에 보인다 (대기 중·자리 남음·접속자 있음, 최대 20개). 로비는 별도 WebSocket으로 `list`를 보내 구독하고, 서버는 `broadcastRoom` 때마다 구독자에게 `rooms`를 다시 보냄. 로비를 닫거나 방에 들어가면 연결을 끊음. 시작 메뉴(`openSetup`)는 이름·싱글플레이·로비 진입만
 - `sid`: 브라우저 localStorage `dalmuti-sid`. 같은 sid로 다시 들어오면 **같은 자리로 복귀** (새로고침·재접속). 현재 방은 `dalmuti-room`에 저장해 자동 재참가
 - 게임 중 연결이 끊기면 `setAI(seat, true)`로 AI가 대신 두고, 돌아오면 해제. 혁명/세금 반환 대기 중이었다면 AI가 즉시 처리
 - 방장이 나가면 접속 중인 다음 사람에게 넘어감. 대기실에서 전원 이탈 시 즉시, 게임 중 전원 이탈 시 10분 뒤 방 삭제
@@ -85,6 +85,7 @@ dalmuti-game/
 | `clearing` | 판 정리 애니메이션 중 플래그 |
 | `taxCtx` | 세금 반환 대기 `{by, to, k, give}` (`give`는 `view`에서 `by`에게만) |
 | `step` | 차례가 바뀔 때마다 증가. 예약된 AI 타이머가 낡았는지 판정 |
+| `deadline` | 사람 차례 마감 시각(ms). `schedule()`이 잡고, 넘기면 바닥이 있으면 자동 패스·선이면 `aiChoose`로 자동 내기. `view`에는 남은 시간 `turnLeft`로만 나감 (클라이언트는 받은 시점 기준 `V.deadline` 계산). 혁명·세금 반환 대기에는 제한 없음 |
 | `log[]` | `{msg, kind, who[], secret}`. `msg`가 null이면 `who`에게만 보임 |
 
 카드 객체: `{id, v}` (v = 1~12, 광대 13)
@@ -124,7 +125,8 @@ start()
 
 - **투명도 슬라이더**: `--op` CSS 변수 (10~100%), `localStorage` 키 `dalmuti-op`에 저장
 - **Esc**: `html.ghost` 토글 → 3% 투명도로 즉시 숨김. 숨긴 상태에서는 Enter/P 단축키 무시
-- **단축키**: Enter 내기, P 패스
+- **단축키**: Enter 내기, P 패스. 카드를 골라 둔 상태에선 패스 버튼·P 모두 잠김 (내기를 누르려다 패스하는 실수 방지). 버튼은 패스 왼쪽 작게 / 내기 오른쪽 크게, 낼 게 없으면 패스가 주 버튼
+- **효과음**: Web Audio로 합성(`sfx(kind)`, 음원 파일 없음) — 카드 착지 `card`, 패스 `pass`, 내 차례 `turn`, 판 정리 `sweep`, 라운드 끝 `end`, 마지막 5초 `tick`. `cueSounds()`가 직전 렌더와 비교해 트리거. 헤더 소리 버튼, `localStorage` 키 `dalmuti-sound`. Esc(ghost) 중엔 무음
 - **속도**: 느림 1000ms / 보통 600ms / 빠름 280ms (`speed`)
 
 ## 확장 아이디어 (다음 작업 후보)

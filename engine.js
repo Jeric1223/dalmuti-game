@@ -69,6 +69,7 @@ function createGame(seats,io){
     players:seats.map((s,i)=>({id:i,name:s.name,human:!!s.human,ai:!s.human,hand:[],score:0}))};
   G.order=shuffle(G.players.map(p=>p.id));
   const sp=()=>io.speed(), changed=()=>io.changed();
+  const turnMs=io.turnMs||0;   // 사람 차례 제한시간(ms). 0이면 없음 (싱글)
   const posOf=id=>G.order.indexOf(id);
   // who: 관련된 플레이어. 이들에겐 secret 문구(카드 내용 포함)가 보이고 강조된다. msg가 null이면 who에게만 보임
   function log(msg,kind='',who=[],secret=null){G.log.unshift({msg,kind,who,secret}); if(G.log.length>80)G.log.pop();}
@@ -135,13 +136,23 @@ function createGame(seats,io){
     G.phase='play'; G.pile=null; G.passStreak=0; G.lastPlayer=null; G.lastAction={};
     G.turn=G.order[0]; G.step++;
     log(`${G.players[G.turn].name}이(가) 첫 선을 잡습니다`);
-    changed(); schedule();
+    schedule(); changed();
   }
   // step: 차례가 바뀔 때마다 증가. 예약된 AI 타이머가 지난 차례에 대해 두 번 두는 것을 막는다
   function schedule(){
+    G.deadline=null;
     if(G.phase!=='play'||G.clearing||G.turn==null) return;
     const p=G.players[G.turn], step=G.step;
-    if(p.ai) io.later(()=>{ if(G.step===step&&p.ai) act(p.id,aiChoose(p.hand,G.pile)); }, sp());
+    if(p.ai) return io.later(()=>{ if(G.step===step&&p.ai) act(p.id,aiChoose(p.hand,G.pile)); }, sp());
+    if(!turnMs) return;
+    // 시간 초과: 바닥에 카드가 있으면 패스, 선이면 AI가 골라서 낸다
+    const dl=G.deadline=Date.now()+turnMs;
+    io.later(()=>{
+      if(G.step!==step||G.deadline!==dl||p.ai||G.turn!==p.id) return;   // 재접속으로 다시 잡힌 타이머가 있으면 그쪽이 처리
+      log(`${p.name} 시간 초과 — ${G.pile?'자동 패스':'자동으로 냅니다'}`);
+      io.toast('시간 초과!',p.id);
+      act(p.id,G.pile?null:aiChoose(p.hand,null));
+    }, turnMs);
   }
   function act(id,cards){
     const p=G.players[id]; G.step++;
@@ -167,11 +178,11 @@ function createGame(seats,io){
       io.later(()=>{
         G.clearing=false; G.pile=null; G.passStreak=0; G.lastPlayer=null; G.lastAction={}; G.turn=leader; G.step++;
         log(`모두 패스 — ${G.players[leader].name}이(가) 새로 선`);
-        changed(); schedule();
+        schedule(); changed();
       }, sp()*1.3);
       return;
     }
-    G.turn=nextActive(id); changed(); schedule();
+    G.turn=nextActive(id); schedule(); changed();
   }
   function endRound(){
     G.phase='roundEnd'; G.turn=null;
@@ -210,7 +221,7 @@ function createGame(seats,io){
     log(on?`${p.name}의 연결이 끊겨 AI가 대신 둡니다`:`${p.name}이(가) 돌아왔습니다`);
     if(on&&G.phase==='revolution'&&G.revBy===id) return resolveRevolution(id,autoRevolution(id));
     if(on&&G.phase==='taxReturn'&&G.taxCtx.by===id) return finishTaxReturn(aiTaxBack(p.hand,G.taxCtx.give,G.taxCtx.k));
-    changed(); if(on) schedule();
+    if(G.turn===id) schedule(); changed();
   }
 
   // viewer 한 명에게 보여줄 상태. 남의 손패는 장수만, 비공개 기록은 관련자에게만
@@ -219,6 +230,7 @@ function createGame(seats,io){
     return {
       me, n, round:G.round, phase:G.phase, order:G.order, pile:G.pile, turn:G.turn, finished:G.finished,
       lastAction:G.lastAction, clearing:G.clearing, revBy:G.revBy,
+      turnMs, turnLeft:G.deadline&&G.turn!=null?Math.max(0,G.deadline-Date.now()):null,
       taxCtx:ctx&&{by:ctx.by,to:ctx.to,k:ctx.k,give:ctx.by===me?ctx.give:null},
       players:G.players.map(q=>({id:q.id,name:q.name,human:q.human,ai:q.ai,score:q.score,count:q.hand.length})),
       hand:G.players[me].hand,

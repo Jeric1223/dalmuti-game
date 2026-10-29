@@ -56,6 +56,7 @@ button{font:inherit;color:inherit}
 .btn.primary{background:var(--gold); color:var(--ink); border-color:var(--gold)}
 .btn.primary:hover:not(:disabled){background:#e8c672}
 .btn.sm{padding:6px 12px; font-size:12px}
+.btn.lg{padding:12px 30px; font-size:16px; font-weight:600}
 
 .board{display:flex; flex-direction:column; gap:12px; min-width:0}
 
@@ -124,6 +125,13 @@ button{font:inherit;color:inherit}
 .fresh::after{content:""; position:absolute; top:5px; right:5px; width:7px; height:7px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 2px var(--ivory)}
 .actions{display:flex; flex-wrap:wrap; gap:8px; align-items:center}
 .actions .spacer{flex:1}
+/* 차례 제한시간: 금색 막대가 줄어들다 끝에서 붉게. --t 전체 시간, --d 이미 지난 시간(음수) */
+.timer{height:4px; border-radius:2px; background:rgba(0,0,0,.4); overflow:hidden}
+.timer i{display:block; height:100%; background:var(--gold); transform-origin:left; animation:burn var(--t) linear var(--d) forwards}
+@keyframes burn{from{transform:scaleX(1)} 70%{background:var(--gold)} to{transform:scaleX(0); background:var(--bad)}}
+.seat .timer{margin-top:5px; height:3px}
+.tsec{font-variant-numeric:tabular-nums; color:var(--gold)}
+.tsec.low{color:var(--bad)}
 .hint{font-size:12px; color:var(--muted)}
 
 .log{background:rgba(42,20,24,.55); border:1px solid var(--line); border-radius:12px; padding:12px 14px; min-width:0; max-height:none}
@@ -170,6 +178,22 @@ button{font:inherit;color:inherit}
 .roomlist li .nm{flex:1; min-width:0}
 .roomlist li .score{flex:none}
 .roomlist li.empty{border-style:dashed; background:none; color:var(--muted); font-size:12px; padding:9px 12px}
+/* 멀티플레이 로비 */
+.panel.wide{max-width:640px}
+.lobby-head{display:flex; align-items:center; justify-content:space-between; gap:10px}
+.live{display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted)}
+.live::before{content:""; width:8px; height:8px; border-radius:50%; background:var(--ok)}
+.live.off::before{background:var(--bad)}
+.roomlist.big{min-height:180px; max-height:300px; padding:8px; border:1px solid var(--line); border-radius:10px; background:rgba(0,0,0,.18)}
+.roomlist.big li{padding:10px 10px 10px 14px}
+.roomlist.big li .nm{font-family:var(--f-ko); font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.roomlist.big li.empty{flex:1; display:grid; place-items:center; text-align:center; font-size:13px; line-height:1.6}
+.pips{color:var(--gold); letter-spacing:1px; font-size:11px; flex:none}
+.pips span{color:var(--line)}
+.lobby-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+@media (max-width:560px){ .lobby-grid{grid-template-columns:1fr} }
+.box{border:1px solid var(--line); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; background:var(--felt)}
+.box h3{margin:0; font-family:var(--f-ko); font-size:15px; color:var(--gold)}
 .check{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); cursor:pointer}
 .check input{accent-color:var(--gold); width:16px; height:16px}
 .link{font-family:ui-monospace,monospace; font-size:12px; color:var(--text); word-break:break-all}
@@ -178,7 +202,7 @@ button{font:inherit;color:inherit}
 .menu>.btn{width:100%; padding:12px 18px}
 .joinrow{display:flex; gap:8px}
 .joinrow input{flex:1; min-width:0}
-@media (prefers-reduced-motion:reduce){ *{animation:none!important; transition:none!important} }
+@media (prefers-reduced-motion:reduce){ *{animation:none!important; transition:none!important} .timer i{animation:burn var(--t) linear var(--d) forwards!important} }
 </style>
 </head>
 <body>
@@ -191,6 +215,7 @@ button{font:inherit;color:inherit}
       <div class="seg" id="speedSeg">
         <button data-s="1000">느림</button><button data-s="600" aria-pressed="true">보통</button><button data-s="280">빠름</button>
       </div>
+      <button class="btn sm" id="soundBtn" aria-pressed="true">소리 켬</button>
       <button class="btn sm" id="rulesBtn">규칙</button>
       <button class="btn sm" id="newBtn">새 게임</button>
     </div>
@@ -275,9 +300,10 @@ function onServer(m){
     try{localStorage.setItem('dalmuti-room',JSON.stringify({code:m.code,name:MP.hello.name}));}catch(_){}
     if(!m.started) openLobby(); else render();
   } else if(m.t==='state'){
-    V=m.view; if(modalKind==='lobby') closeModal(); render();
+    V=m.view; V.deadline=V.turnLeft!=null?Date.now()+V.turnLeft:null;   // 서버 시계 대신 받은 시점 기준으로
+    if(modalKind==='lobby') closeModal(); render();
   } else if(m.t==='toast') toast(m.msg);
-  else if(m.t==='error'){ toast(m.msg); if(m.fatal){ leaveRoom(); openSetup(); } }
+  else if(m.t==='error'){ toast(m.msg); if(m.fatal){ leaveRoom(); openBrowse(); } }
 }
 function leaveRoom(){
   if(!MP) return;
@@ -295,14 +321,71 @@ function watchRooms(){
   ws.onmessage=e=>{ const m=JSON.parse(e.data); if(m.t==='rooms'&&listWS===ws) renderRoomList(m.list); };
   ws.onclose=()=>{ if(listWS===ws){ listWS=null; renderRoomList(null); } };
 }
+const pips=(c,n)=>'●'.repeat(c)+`<span>${'●'.repeat(n-c)}</span>`;
 function stopWatchRooms(){ const ws=listWS; listWS=null; if(ws){ ws.onclose=null; ws.close(); } }
 function renderRoomList(list){
   const el=$('#roomList'); if(!el) return;
+  $('#liveDot')?.classList.toggle('off',!list);
   el.innerHTML=!list?'<li class="empty">서버에 연결할 수 없습니다</li>'
-    :!list.length?'<li class="empty">지금 열린 공개 방이 없습니다</li>'
-    :list.map(r=>`<li><span class="nm">${esc(r.host)}의 방</span><span class="score">${r.count}/${r.n}명</span><button class="btn sm" data-code="${esc(r.code)}">참가</button></li>`).join('');
+    :!list.length?'<li class="empty">지금 열린 공개 방이 없습니다.<br>아래에서 공개 방을 만들면 여기에 나타납니다.</li>'
+    :list.map(r=>`<li><span class="nm">${esc(r.host)}의 방</span><span class="pips" aria-hidden="true">${pips(r.count,r.n)}</span><span class="score">${r.count}/${r.n}명</span><button class="btn sm primary" data-code="${esc(r.code)}">참가</button></li>`).join('');
   el.querySelectorAll('button[data-code]').forEach(b=>b.onclick=()=>joinRoom({t:'join',code:b.dataset.code,name:myName=$('#nameIn').value.trim()||'나'}));
 }
+
+/* ---------- 효과음 (Web Audio로 합성 — 음원 파일 없음) ---------- */
+let actx=null, soundOn=true;
+try{ soundOn=localStorage.getItem('dalmuti-sound')!=='off'; }catch(_){}
+function sfx(kind){
+  if(!soundOn||document.documentElement.classList.contains('ghost')) return;
+  if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(_){ return; } }
+  if(actx.state==='suspended') actx.resume();
+  const t=actx.currentTime, out=actx.destination;
+  const tone=(f,f2,at,dur,type,vol)=>{
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type=type; o.frequency.setValueAtTime(f,t+at); if(f2) o.frequency.exponentialRampToValueAtTime(f2,t+at+dur);
+    g.gain.setValueAtTime(.0001,t+at); g.gain.exponentialRampToValueAtTime(vol,t+at+.008); g.gain.exponentialRampToValueAtTime(.0001,t+at+dur);
+    o.connect(g).connect(out); o.start(t+at); o.stop(t+at+dur+.02);
+  };
+  const noise=(dur,f,f2,q,vol)=>{
+    const b=actx.createBuffer(1,Math.ceil(actx.sampleRate*dur),actx.sampleRate), d=b.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2);
+    const s=actx.createBufferSource(), bp=actx.createBiquadFilter(), g=actx.createGain();
+    s.buffer=b; bp.type='bandpass'; bp.Q.value=q; bp.frequency.setValueAtTime(f,t); if(f2) bp.frequency.exponentialRampToValueAtTime(f2,t+dur);
+    g.gain.value=vol; s.connect(bp).connect(g).connect(out); s.start(t);
+  };
+  ({
+    card:()=>{ noise(.07,2500,0,1.2,.7); tone(140,60,0,.08,'sine',.25); },          // 착
+    pass:()=>{ tone(200,110,0,.08,'sine',.2); tone(200,110,.12,.08,'sine',.13); },   // 똑똑
+    turn:()=>{ tone(660,0,0,.18,'triangle',.12); tone(880,0,.12,.28,'triangle',.12); },
+    sweep:()=>noise(.35,800,3000,.8,.4),
+    end:()=>[523,659,784].forEach((f,i)=>tone(f,0,i*.12,.4,'triangle',.1)),
+    tick:()=>tone(1200,0,0,.04,'square',.035),
+  })[kind]();
+}
+// 브라우저는 사용자 입력 전엔 소리를 막으므로 첫 터치 때 깨워 둔다
+addEventListener('pointerdown',()=>{ if(actx&&actx.state==='suspended') actx.resume(); },{passive:true});
+function setSound(on){
+  soundOn=on; const b=$('#soundBtn'); b.textContent=on?'소리 켬':'소리 끔'; b.setAttribute('aria-pressed',on);
+  try{localStorage.setItem('dalmuti-sound',on?'on':'off');}catch(_){}
+}
+// 직전 렌더와 비교해 바뀐 순간에만 소리를 낸다 (카드 소리는 throwCards에서)
+let prevCue=null;
+function cueSounds(){
+  const c={turn:V.turn, mine:canAct(), clearing:!!V.clearing, end:V.phase==='roundEnd', pileKey};
+  const p=prevCue; prevCue=c;
+  if(!p) return;
+  if(p.turn!=null&&c.turn!==p.turn&&c.pileKey===p.pileKey&&V.lastAction[p.turn]?.pass) sfx('pass');
+  if(c.mine&&!p.mine) sfx('turn');
+  if(c.clearing&&!p.clearing) sfx('sweep');
+  if(c.end&&!p.end) sfx('end');
+}
+// 남은 초 갱신 + 마지막 5초 째깍
+setInterval(()=>{
+  const el=$('#tsec'); if(!el||!V||!V.deadline) return;
+  const s=secLeft(); if(el.textContent===String(s)) return;
+  el.textContent=s; el.classList.toggle('low',s<=5);
+  if(s>0&&s<=5) sfx('tick');
+},200);
 
 /* ---------- 사람 입력 ---------- */
 function canAct(){return V&&V.phase==='play'&&V.turn===V.me&&!V.clearing;}
@@ -338,7 +421,8 @@ function humanPlay(){
   const cards=V.hand.filter(c=>sel.has(c.id)); if(!isValid(cards,V.pile)) return;
   sel.clear(); send('play',{ids:cards.map(c=>c.id)}); render();
 }
-function humanPass(){ if(!canAct()||!V.pile)return; sel.clear(); send('pass'); render(); }
+// 카드를 골라 둔 상태에선 패스 잠금 — 내려다 패스를 누르는 실수 방지
+function humanPass(){ if(!canAct()||!V.pile||sel.size)return; send('pass'); render(); }
 function confirmTaxReturn(){
   if(!myTax()) return;
   const ids=V.hand.filter(c=>sel.has(c.id)).map(c=>c.id); if(ids.length!==V.taxCtx.k) return;
@@ -360,8 +444,14 @@ function render(){
   $('#speedLbl').style.display=$('#speedSeg').style.display=MP?'none':'';
   // 손패를 다시 그리기 전에 위치를 잡아둔다 (내가 낸 카드는 손패 자리에서 날아감)
   const fromHand=new Map([...$('#hand').children].map(el=>[+el.dataset.id,el.getBoundingClientRect()]));
-  renderSeats(); renderTable(); throwCards(fromHand); renderMe(); renderLog(); renderModal();
+  renderSeats(); renderTable(); throwCards(fromHand); renderMe(); renderLog(); renderModal(); cueSounds();
 }
+// 남은 시간 막대 (멀티에서 사람 차례일 때만 V.deadline이 있음)
+function timerHTML(){
+  const left=Math.max(0,V.deadline-Date.now());
+  return `<div class="timer" style="--t:${V.turnMs}ms;--d:${left-V.turnMs}ms"><i></i></div>`;
+}
+const secLeft=()=>Math.max(0,Math.ceil((V.deadline-Date.now())/1000));
 function renderSeats(){
   // 나를 맨 아래에 두고 진행 순서(order)대로 시계 방향 배치
   const hi=V.order.indexOf(V.me), list=[];
@@ -379,7 +469,7 @@ function renderSeats(){
     return `<div class="seat ${turn?'turn':''} ${fin>=0?'done':''} ${id===V.me?'self':''}" data-id="${id}" style="--cx:${cx};--cy:${cy}">
       <div class="seat-top"><span class="ord">${pos+1}</span><span class="nm">${esc(p.name)}</span></div>
       <div class="seat-mid"><span class="badge ${badgeCls(pos,V.n)}">${titleFor(pos,V.n)}</span><span class="backs">${'<span class="back"></span>'.repeat(nb)}</span><span>${p.count}장</span>${tag}</div>
-      <div class="seat-act">${act}</div></div>`;
+      <div class="seat-act">${act}</div>${turn&&V.deadline?timerHTML():''}</div>`;
   }).join('');
 }
 function renderTable(){
@@ -401,7 +491,8 @@ const flying=new Set();
 function throwCards(fromHand){
   const p=V.pile, key=p?p.by+':'+p.cards.map(c=>c.id).join(','):'';
   if(key===pileKey) return; pileKey=key;
-  if(!p||matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if(!p) return;
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches) return sfx('card');
   const seat=$(`#seats [data-id="${p.by}"]`)?.getBoundingClientRect();
   [...$('#table .pile').children].forEach((el,i)=>{
     const id=+el.dataset.id, from=fromHand.get(id)||seat; if(!from) return;
@@ -416,7 +507,7 @@ function throwCards(fromHand){
       {transform:`translate(${dx}px,${dy}px) scale(${s}) rotate(${r}deg)`},
       {transform:getComputedStyle(el).transform}
     ],{duration:420,delay:i*110,easing:'cubic-bezier(.2,.75,.3,1)',fill:'both'});
-    anim.onfinish=anim.oncancel=()=>{ fly.remove(); flying.delete(id); $(`#table .card[data-id="${id}"]`)?.classList.remove('landing'); };
+    anim.onfinish=anim.oncancel=e=>{ if(e.type==='finish') sfx('card'); fly.remove(); flying.delete(id); $(`#table .card[data-id="${id}"]`)?.classList.remove('landing'); };
   });
 }
 function renderMe(){
@@ -435,10 +526,12 @@ function renderMe(){
     else if(myTurn){
       if(!V.pile) status='<b>내 선</b> — 같은 숫자를 원하는 장수만큼 내세요. 광대는 아무 숫자에 붙일 수 있습니다.';
       else status= playable.size? `<b>내 차례</b> — ${V.pile.count}장, ${V.pile.value-1} 이하 숫자로 받아치거나 패스.` : '<b>내 차례</b> — 낼 수 있는 조합이 없습니다. 패스하세요.';
-      const cards=hand.filter(c=>sel.has(c.id)), ok=isValid(cards,V.pile);
-      acts=`<button class="btn primary" id="playBtn" ${ok?'':'disabled'}>${cards.length?cards.length+'장 내기':'내기'}</button>
-        <button class="btn" id="passBtn" ${V.pile?'':'disabled'}>패스</button>
-        <span class="spacer"></span>${sel.size?'<button class="btn sm" id="clearBtn">선택 해제</button>':''}`;
+      if(V.deadline){ const s=secLeft(); status+=` <span class="tsec ${s<=5?'low':''}" id="tsec">${s}</span><span class="hint">초</span>${timerHTML()}`; }
+      // 패스는 왼쪽 작게, 내기는 오른쪽 크게. 카드를 고르면 패스 잠금, 낼 게 없으면 패스가 주 버튼
+      const cards=hand.filter(c=>sel.has(c.id)), ok=isValid(cards,V.pile), passMain=V.pile&&!playable.size;
+      acts=`<button class="btn ${passMain?'primary lg':''}" id="passBtn" ${V.pile&&!sel.size?'':'disabled'} title="${sel.size?'카드를 고른 상태에선 패스할 수 없습니다':'단축키 P'}">패스</button>
+        <span class="spacer"></span>${sel.size?'<button class="btn sm" id="clearBtn">선택 해제</button>':''}
+        ${passMain?'':`<button class="btn primary lg" id="playBtn" ${ok?'':'disabled'} title="단축키 Enter">${cards.length?cards.length+'장 내기':'내기'}</button>`}`;
     } else status= V.clearing?'판을 정리하는 중…':`${esc(V.turn!=null?V.players[V.turn].name:'')} 차례입니다`;
   } else if(V.phase==='roundEnd') status='라운드가 끝났습니다.';
   else status={deal:'카드를 받는 중…',tax:'세금을 걷는 중…',taxReturn:'세금을 걷는 중…',revolution:'혁명 여부를 정하는 중…'}[V.phase]||'';
@@ -496,35 +589,57 @@ function renderModal(){
   }
   m.hidden=true; m.innerHTML='';
 }
-function openSetup(code=''){
+function openSetup(){
   modalKind='setup'; const m=$('#modal'), cancel=!!(game||V), off=!canMulti;
   const chips=[4,5,6,7,8].map(n=>`<button data-n="${n}" aria-pressed="${n===setupN}">${n}</button>`).join('');
   m.innerHTML=`<div class="panel"><h2>${cancel?'새 게임':'달무티'}</h2>
     <p class="muted">숫자가 작을수록 강한 카드 게임. 혼자 AI와 겨루거나, 방을 만들어 친구와 함께합니다.</p>
     <div class="field"><label for="nameIn">내 이름</label><input id="nameIn" maxlength="8" value="${esc(myName)}"></div>
-    <div class="field"><label>인원 (싱글플레이는 나 포함 · 방 만들기는 사람 + AI)</label><div class="chips" id="nChips">${chips}</div></div>
+    <div class="field"><label>싱글플레이 인원 (나 포함)</label><div class="chips" id="nChips">${chips}</div></div>
     <div class="menu">
       <button class="btn primary" id="setGo">싱글플레이</button>
-      <button class="btn" id="createGo"${off?' disabled':''}>멀티플레이 · 방 만들기</button>
-      <label class="check"><input type="checkbox" id="pubIn"${setupPub?' checked':''}${off?' disabled':''}> 공개 방으로 만들기 (아래 목록에 보여서 누구나 참가)</label>
-      <div class="field"><label for="codeIn">멀티플레이 · 받은 방 코드로 참가</label>
-        <div class="joinrow"><input id="codeIn" class="code-in" maxlength="4" placeholder="ABCD" autocomplete="off" value="${esc(code)}"${off?' disabled':''}><button class="btn" id="joinGo"${off?' disabled':''}>방 참가</button></div></div>
-      ${off?'':'<div class="field"><label>열린 공개 방</label><ul class="roomlist" id="roomList"><li class="empty">불러오는 중…</li></ul></div>'}
+      <button class="btn" id="browseGo"${off?' disabled':''}>멀티플레이 로비 →</button>
     </div>
     ${off?'<p class="muted">멀티플레이는 서버(<b>npm start</b>)로 접속했을 때만 쓸 수 있습니다.</p>':''}
     ${cancel?'<div class="row-end"><button class="btn" id="setCancel">취소</button></div>':''}</div>`;
   m.hidden=false;
   const nm=()=>(myName=$('#nameIn').value.trim()||'나');
-  const join=()=>{ const c=$('#codeIn').value.trim().toUpperCase(); if(c.length!==4) return toast('방 코드 4자리를 입력하세요'); joinRoom({t:'join',code:c,name:nm()}); };
-  m.querySelectorAll('#nChips button').forEach(b=>b.onclick=()=>{setupN=+b.dataset.n;m.querySelectorAll('#nChips button').forEach(x=>x.setAttribute('aria-pressed',x===b));});
+  bindChips(m);
   $('#setGo').onclick=()=>startGame(setupN,nm());
+  $('#browseGo').onclick=()=>{ nm(); openBrowse(); };
+  $('#setCancel')&&($('#setCancel').onclick=()=>{closeModal();render();});
+}
+function bindChips(m){
+  m.querySelectorAll('#nChips button').forEach(b=>b.onclick=()=>{setupN=+b.dataset.n;m.querySelectorAll('#nChips button').forEach(x=>x.setAttribute('aria-pressed',x===b));});
+}
+// 멀티플레이 로비: 공개 방 목록(실시간) + 방 만들기 + 코드로 참가
+function openBrowse(code=''){
+  modalKind='browse'; const m=$('#modal');
+  const chips=[4,5,6,7,8].map(n=>`<button data-n="${n}" aria-pressed="${n===setupN}">${n}</button>`).join('');
+  m.innerHTML=`<div class="panel wide"><div class="lobby-head"><h2>멀티플레이 로비</h2><span class="live" id="liveDot">실시간</span></div>
+    <div class="field"><label for="nameIn">내 이름</label><input id="nameIn" maxlength="8" value="${esc(myName)}"></div>
+    <div class="field"><label>열린 공개 방</label><ul class="roomlist big" id="roomList"><li class="empty">불러오는 중…</li></ul></div>
+    <div class="lobby-grid">
+      <div class="box"><h3>방 만들기</h3>
+        <div class="field"><label>인원 (사람 + 빈자리는 AI)</label><div class="chips" id="nChips">${chips}</div></div>
+        <label class="check"><input type="checkbox" id="pubIn"${setupPub?' checked':''}> 공개 방 (위 목록에 보임)</label>
+        <button class="btn primary" id="createGo">방 만들기</button></div>
+      <div class="box"><h3>코드로 참가</h3>
+        <p class="muted">친구에게 받은 방 코드 4자리를 입력하세요.</p>
+        <div class="joinrow"><input id="codeIn" class="code-in" maxlength="4" placeholder="ABCD" autocomplete="off" value="${esc(code)}"><button class="btn" id="joinGo">참가</button></div></div>
+    </div>
+    <div class="row-end"><button class="btn" id="browseBack">← 처음으로</button></div></div>`;
+  m.hidden=false;
+  const nm=()=>(myName=$('#nameIn').value.trim()||'나');
+  const join=()=>{ const c=$('#codeIn').value.trim().toUpperCase(); if(c.length!==4) return toast('방 코드 4자리를 입력하세요'); joinRoom({t:'join',code:c,name:nm()}); };
+  bindChips(m);
   $('#pubIn').onchange=e=>setupPub=e.target.checked;
   $('#createGo').onclick=()=>joinRoom({t:'create',n:setupN,name:nm(),pub:setupPub});
   $('#joinGo').onclick=join;
   $('#codeIn').addEventListener('keydown',e=>{ if(e.key==='Enter') join(); });
   if(code) $('#codeIn').focus();
-  if(!off) watchRooms();
-  $('#setCancel')&&($('#setCancel').onclick=()=>{closeModal();render();});
+  $('#browseBack').onclick=()=>{ stopWatchRooms(); openSetup(); };
+  watchRooms();
 }
 function openLobby(){
   modalKind='lobby'; const r=MP.room, m=$('#modal'), empty=r.n-r.members.length;
@@ -536,7 +651,7 @@ function openLobby(){
     <p class="muted">${r.n}인 게임 · 지금 ${r.members.length}명 입장${empty?` · 시작하면 빈자리 ${empty}개는 AI가 채웁니다`:''}</p>
     <div class="row-end"><button class="btn" id="lobbyLeave">나가기</button>${r.host?'<button class="btn primary" id="lobbyStart">시작하기</button>':'<span class="hint">방장이 시작하기를 기다리는 중…</span>'}</div></div>`;
   m.hidden=false;
-  $('#lobbyLeave').onclick=()=>{leaveRoom();openSetup();};
+  $('#lobbyLeave').onclick=()=>{leaveRoom();openBrowse();};
   $('#lobbyStart')&&($('#lobbyStart').onclick=()=>wsSend({t:'start'}));
 }
 function openRules(){
@@ -569,6 +684,8 @@ $('#hand').addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.t
 $('#speedSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;speed=+b.dataset.s;document.querySelectorAll('#speedSeg button').forEach(x=>x.setAttribute('aria-pressed',x===b));});
 $('#rulesBtn').onclick=openRules;
 $('#newBtn').onclick=()=>openSetup();
+$('#soundBtn').onclick=()=>setSound(!soundOn);
+setSound(soundOn);
 /* 투명도 (회사 모드) */
 function setOpacity(v){
   v=Math.max(10,Math.min(100,+v||100));
@@ -591,7 +708,8 @@ window.addEventListener('resize',layoutHand);
 let savedRoom=null; try{savedRoom=JSON.parse(localStorage.getItem('dalmuti-room'));}catch(_){}
 const inviteCode=new URLSearchParams(location.search).get('room');
 if(canMulti&&savedRoom?.code){ myName=savedRoom.name||myName; joinRoom({t:'join',code:savedRoom.code,name:myName}); }
-else openSetup(canMulti&&inviteCode?inviteCode.trim().toUpperCase().slice(0,4):'');
+else if(canMulti&&inviteCode) openBrowse(inviteCode.trim().toUpperCase().slice(0,4));
+else openSetup();
 </script>
 </body>
 </html>
