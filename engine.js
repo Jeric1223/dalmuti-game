@@ -140,19 +140,20 @@ function createGame(seats,io){
   }
   // step: 차례가 바뀔 때마다 증가. 예약된 AI 타이머가 지난 차례에 대해 두 번 두는 것을 막는다
   function schedule(){
+    const keep=G.dl&&G.dl.step===G.step?G.dl.at:null;   // 같은 차례에 재접속하면 남은 시간 그대로 (새로고침으로 시간 늘리기 방지)
     G.deadline=null;
     if(G.phase!=='play'||G.clearing||G.turn==null) return;
     const p=G.players[G.turn], step=G.step;
     if(p.ai) return io.later(()=>{ if(G.step===step&&p.ai) act(p.id,aiChoose(p.hand,G.pile)); }, sp());
     if(!turnMs) return;
     // 시간 초과: 바닥에 카드가 있으면 패스, 선이면 AI가 골라서 낸다
-    const dl=G.deadline=Date.now()+turnMs;
+    const dl=G.deadline=keep||Date.now()+turnMs; G.dl={step,at:dl};
     io.later(()=>{
       if(G.step!==step||G.deadline!==dl||p.ai||G.turn!==p.id) return;   // 재접속으로 다시 잡힌 타이머가 있으면 그쪽이 처리
       log(`${p.name} 시간 초과 — ${G.pile?'자동 패스':'자동으로 냅니다'}`);
       io.toast('시간 초과!',p.id);
       act(p.id,G.pile?null:aiChoose(p.hand,null));
-    }, turnMs);
+    }, Math.max(0,dl-Date.now()));
   }
   function act(id,cards){
     const p=G.players[id]; G.step++;

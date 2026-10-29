@@ -85,7 +85,7 @@ dalmuti-game/
 | `clearing` | 판 정리 애니메이션 중 플래그 |
 | `taxCtx` | 세금 반환 대기 `{by, to, k, give}` (`give`는 `view`에서 `by`에게만) |
 | `step` | 차례가 바뀔 때마다 증가. 예약된 AI 타이머가 낡았는지 판정 |
-| `deadline` | 사람 차례 마감 시각(ms). `schedule()`이 잡고, 넘기면 바닥이 있으면 자동 패스·선이면 `aiChoose`로 자동 내기. `view`에는 남은 시간 `turnLeft`로만 나감 (클라이언트는 받은 시점 기준 `V.deadline` 계산). 혁명·세금 반환 대기에는 제한 없음 |
+| `deadline` | 사람 차례 마감 시각(ms). `schedule()`이 잡고, 넘기면 바닥이 있으면 자동 패스·선이면 `aiChoose`로 자동 내기. `view`에는 남은 시간 `turnLeft`로만 나감 (클라이언트는 받은 시점 기준 `V.deadline` 계산). 같은 차례에 끊겼다 돌아오면 `G.dl`에 보관한 마감 시각을 이어 씀(새로고침으로 시간 연장 방지). 혁명·세금 반환 대기에는 제한 없음 |
 | `log[]` | `{msg, kind, who[], secret}`. `msg`가 null이면 `who`에게만 보임 |
 
 카드 객체: `{id, v}` (v = 1~12, 광대 13)
