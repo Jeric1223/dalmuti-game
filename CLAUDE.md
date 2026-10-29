@@ -20,6 +20,7 @@ dalmuti-game/
 ├── engine.js     # 게임 엔진 (룰·AI·상태 머신). 브라우저(window.Dalmuti)·Node(require) 공용
 ├── server.js     # 멀티플레이 서버 (정적 파일 + WebSocket, 방 관리, 권위 서버)
 ├── package.json  # npm start, 의존성 ws
+├── robots.txt, sitemap.xml  # SEO (배포 주소 https://dalmuti-game-6euz.onrender.com/ 하드코딩 — 주소 바뀌면 index.html head의 canonical/og:url/JSON-LD와 함께 수정)
 └── CLAUDE.md     # 이 문서
 ```
 
@@ -66,7 +67,7 @@ dalmuti-game/
 - `sid`: 브라우저 localStorage `dalmuti-sid`. 같은 sid로 다시 들어오면 **같은 자리로 복귀** (새로고침·재접속). 현재 방은 `dalmuti-room`에 저장해 자동 재참가
 - 게임 중 연결이 끊기면 `setAI(seat, true)`로 AI가 대신 두고, 돌아오면 해제. 혁명/세금 반환 대기 중이었다면 AI가 즉시 처리
 - 방장이 나가면 접속 중인 다음 사람에게 넘어감. 대기실에서 전원 이탈 시 즉시, 게임 중 전원 이탈 시 10분 뒤 방 삭제
-- 서버는 `/`, `/index.html`, `/engine.js`만 서빙 (나머지 404). WebSocket `maxPayload` 4KB, 30초 ping으로 죽은 연결 정리
+- 서버는 `/`, `/index.html`, `/engine.js`, `/robots.txt`, `/sitemap.xml`만 서빙 (나머지 404). WebSocket `maxPayload` 4KB, 30초 ping으로 죽은 연결 정리
 
 ### 엔진 상태 `G`
 

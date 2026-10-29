@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://dalmuti-game-6euz.onrender.com/sitemap.xml

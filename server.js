@@ -8,8 +8,8 @@ const PORT=process.env.PORT||3000;
 const AI_DELAY=700;                    // AI 한 수 간격(ms)
 const TURN_MS=30*1000;                 // 사람 차례 제한시간
 const EMPTY_ROOM_TTL=10*60*1000;       // 게임 중 전원 이탈 시 방 보관 시간
-const STATIC={'/':'index.html','/index.html':'index.html','/engine.js':'engine.js'};
-const TYPES={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8'};
+const STATIC={'/':'index.html','/index.html':'index.html','/engine.js':'engine.js','/robots.txt':'robots.txt','/sitemap.xml':'sitemap.xml'};
+const TYPES={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.txt':'text/plain; charset=utf-8','.xml':'application/xml; charset=utf-8'};
 
 const server=http.createServer((req,res)=>{
   const f=STATIC[req.url.split('?')[0]];
